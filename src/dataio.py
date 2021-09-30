@@ -24,17 +24,33 @@ def load_dam_network(idx):
         dams = pickle.load(f)
     return nx.DiGraph([x[::-1] for x in dams[idx]])
 
-def load_basin_rain(idx):
+def load_basin_msm(idx, var_name="rain"):
+    """
+    """
+    assert var_name in msm_variables
+    df = pd.read_csv(pj(basin_msm_path, msm_variables[var_name])).set_index("Unnamed: 0")
     with open(dam_networks_path, "rb") as f:
         dams = pickle.load(f)
-        nodes = list(set([x for y in dams[idx] for x in y]))
-    return pd.read_pickle(basin_rain_path)[nodes]
+        nodes = list(set([str(x) for y in dams[idx] for x in y]))
+    return df[nodes]
 
-def load_basin_temp(idx):
+def load_basin_te(idx, var_name="snow_amount", daily=False):
+    """
+    """
+    assert var_name in te_variables
+    folder = "Daily" if daily else "Hourly"
+    df = pd.read_pickle(pj(basin_te_path, folder, "DF", te_variables[var_name]))
     with open(dam_networks_path, "rb") as f:
         dams = pickle.load(f)
         nodes = list(set([x for y in dams[idx] for x in y]))
-    return pd.read_pickle(basin_temp_path)[nodes]
+    return df
+
+def load_dam_rivout(dam_idx, daily=False):
+    """
+    """
+    folder = "Daily" if daily else "Hourly"
+    df = pd.read_pickle(pj(basin_rivout_path, folder, "rivout.pkl"))[dam_idx]
+    return df
 
 def load_basin_shapes(idx):
     with open(dam_networks_path, "rb") as f:
