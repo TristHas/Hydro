@@ -1,4 +1,4 @@
-import pickle
+import pickle, datetime
 import networkx as nx
 import pandas as pd
 import geopandas as gpd
@@ -29,9 +29,13 @@ def load_basin_msm(idx, var_name="rain"):
     """
     assert var_name in msm_variables
     df = pd.read_csv(pj(basin_msm_path, msm_variables[var_name])).set_index("Unnamed: 0")
+    df.index = [datetime.datetime.strptime(x, '%Y-%m-%d %H:%M:%S') + datetime.timedelta(hours=9)\
+                for x in df.index]
+    df.columns = [int(x) for x in df.columns]
     with open(dam_networks_path, "rb") as f:
         dams = pickle.load(f)
-        nodes = list(set([str(x) for y in dams[idx] for x in y]))
+        nodes = list(set([x for y in dams[idx] for x in y]))
+    
     return df[nodes]
 
 def load_basin_te(idx, var_name="snow_amount", daily=False):
