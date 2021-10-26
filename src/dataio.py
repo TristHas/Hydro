@@ -47,7 +47,7 @@ def load_basin_te(idx, var_name="snow_amount", daily=False):
     with open(dam_networks_path, "rb") as f:
         dams = pickle.load(f)
         nodes = list(set([x for y in dams[idx] for x in y]))
-    return df
+    return df[nodes]
 
 def load_dam_rivout(dam_idx, daily=False):
     """
