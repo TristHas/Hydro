@@ -3,6 +3,8 @@ from sklearn.decomposition import PCA
 from sklearn import preprocessing
 import numpy as np
 
+PCA_UPPER_DIM = 1000
+
 class Linear(LinearRegression):
     def __init__(self):
         self.sscaler = preprocessing.StandardScaler()
@@ -24,7 +26,7 @@ class Linear(LinearRegression):
         x = self.sscaler.transform(x) 
         
         #累積寄与率が0.9を超えるような次元数を求める
-        pca = PCA(n_components=x.shape[1]-1)
+        pca = PCA(n_components=min(PCA_UPPER_DIM, x.shape[1]-1))
         _ = pca.fit(x)
         cumcon = np.cumsum(pca.explained_variance_ratio_)
         
