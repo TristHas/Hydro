@@ -274,3 +274,13 @@ def get_lstm_prediction(idx):
     df = pd.concat([qobs.to_dataframe(), qsim.to_dataframe()], axis=1).dropna(how='any').drop('time_step', axis=1)
     df.columns = ['y', 'pred']
     return df
+
+
+
+#############  For forecast experiments #############
+def load_gsm_fcst(idx):
+    with open(dam_networks_path, 'rb') as f:
+        dams = pickle.load(f)
+        nodes = list(set([x for y in dams[idx] for x in y]))
+    df = pd.concat([(pd.read_pickle(pj(gsm_path, f'{node}.pkl')).T.iloc[:,:-1]) for node in nodes], axis=1)
+    return df.groupby(level=0, axis=1).sum()
