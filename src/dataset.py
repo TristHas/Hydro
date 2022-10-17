@@ -227,3 +227,134 @@ def ds_generator(idxs,
         yield (idx, ds, transform(train_x), train_y, train_date,
                transform(val_x), val_y, val_date,
                transform(test_x), test_y, test_date)
+        
+        
+        
+#############  For forecast experiments #############
+def hybrid_rain(past_df, fcst_df, 
+                observed_hour=5, 
+                horizon=3, hourly=False, **kwargs):
+    # dfはhourlyで入力するからdailyはいったんhourlyする
+    if not hourly:
+        horizon = horizon * 24
+    T = horizon
+    assert T < fcst_df.shape[1]
+    
+    # dfの前処理
+    fcst = fcst_df.loc[:,:T]
+    past_rain = past_df["rain"]
+    
+    # funcy indexing of past_df
+    delta_step = np.arange(T)[None]
+    time_step = np.arange(past_rain.shape[0]-T)[:,None]
+    index  = delta_step + time_step
+    past_rain_reshaped = pd.DataFrame(past_rain.values[index], index=past_rain.index[:-T])
+    
+    # concatenate
+    # dataのindexをtargetに調整
+    hybrid_rain = pd.concat([past_rain_reshaped.loc[:,:observed_hour], fcst.loc[:,observed_hour+1:]], axis=1).dropna()
+    hybrid_rain.index = hybrid_rain.index + datetime.timedelta(hours=T)
+
+    # dailyならaggregation
+    if not hourly:
+        hybrid_rain.columns = hybrid_rain.columns//24
+        hybrid_rain = hybrid_rain.groupby(level=0, axis=1).sum()
+    
+    return hybrid_rain
+
+
+def past_obs_and_gt(df, past, horizon, 
+                    input_discharge=False,
+                    input_month=False, input_snmlt=False,
+                    hourly=True, **kwargs):
+    """
+    """
+    # dfはhourlyで入力するからdailyはいったんhourlyする
+    if not hourly:
+        past = past * 24
+        horizon = horizon * 24
+    T = (past + horizon)
+
+    # funcy indexing
+    delta_step = np.arange(past)[None]
+    time_step = np.arange(len(df)-T)[:,None]
+    x_idx  = delta_step + time_step 
+    y_idx = (time_step + T).squeeze() 
+    out_flow = df["inflow_vol"].iloc[y_idx]
+    
+    X_rain = pd.DataFrame(df.loc[:, 'rain'].values[x_idx], index=df.index[:-T])
+    X_temp = pd.DataFrame(df.loc[:, 'temp'].values[x_idx], index=df.index[:-T])
+    
+    # dailyならaggregationする
+    if not hourly:
+        X_rain.columns = np.arange(past//24).repeat(24)
+        X_rain = X_rain.groupby(level=0, axis=1).sum()
+        X_temp.columns = np.arange(past//24).repeat(24)
+        X_temp = X_temp.groupby(level=0, axis=1).mean()
+    
+    
+    if input_discharge:
+        x_discharge = pd.DataFrame(df.values[x_idx,-1], index=df.index[:-T])
+        X_temp = pd.concat([x_discharge, X_temp], axis=1)
+        
+    if input_snmlt:
+        x_snmlt = pd.DataFrame(df.loc[:,'snmlt'].values[x_idx], index=df.index[:-T])
+        X_temp = pd.concat([x_snmlt, X_temp], axis=1)
+
+    if input_month:
+        month=df.iloc[y_idx].index.month.values-1
+        month_one_hot = pd.DataFrame(np.identity(12)[month], index=df.index[:-T])
+        X_temp = pd.concat([month_one_hot, X_temp], axis=1)
+            
+    
+    # concatenate
+    # obs_inputのindexをtargetの日時に調整
+    obs_input = pd.concat([X_temp, X_rain], axis=1)     
+    obs_input.index = obs_input.index + datetime.timedelta(hours=T)
+    return obs_input, out_flow
+
+def test_hybrid_data(past_df, fcst_df,
+                     past=20, horizon=3, hourly=False, observed_hour=5, 
+                     input_discharge=False, input_month=False, input_snmlt=False, **kwargs):
+    inp, _ = generate_forecast_ds(past_df, fcst_df,
+                                 past=past, horizon=horizon, hourly=hourly, observed_hour=48, 
+                                 input_discharge=input_discharge, input_month=input_month)
+    
+    # index's freq is almost 6 hours
+    print(inp.index.to_series().diff().value_counts())
+        
+    # following two variables must be equal
+    obs_at_hybrid = inp.shift(1).iloc[:,2*past+3]
+    obs_at_past = inp.iloc[:,2*past-3]
+
+    return (obs_at_hybrid - obs_at_past).value_counts()
+        
+    
+def generate_forecast_ds(past_df, fcst_df,
+                         past=20, horizon=3, hourly=False, observed_hour=5, 
+                         input_discharge=False, input_month=False, input_snmlt=False, input_fcst=True, **kwargs):
+    
+    obs_input, out_flow = past_obs_and_gt(past_df, 
+                                          past=past, horizon=horizon,hourly=hourly, input_discharge=input_discharge, 
+                                          input_month=input_month, input_snmlt=input_snmlt)    
+    if horizon != 0:
+        hybrid_input = hybrid_rain(past_df, fcst_df, 
+                                   observed_hour=observed_hour, 
+                                   horizon=horizon, hourly=hourly)
+    
+        time_index = obs_input.index[obs_input.index.isin(hybrid_input.index)]
+        past_input = obs_input.reindex(time_index)
+        out_flow = out_flow[time_index]
+    else:
+        past_input = obs_input
+    
+    # GSMデータ追加による影響を調べたい
+    if input_fcst and horizon!=0:
+        full_input = pd.concat([past_input, hybrid_input], axis=1)
+    else:
+        full_input = past_input
+    
+    
+    msk = (~full_input.isna().any(1) & ~out_flow.isna())
+    
+    return full_input[msk], out_flow[msk]
