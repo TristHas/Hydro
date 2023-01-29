@@ -2,8 +2,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 import xarray as xr
 
-
-
 def getRadar(dt_list, region='jp', save_dir='/media/yoshimi/Elements/pixel/radar', original_radar_size=(2048, 2048)):
     """
     
@@ -26,11 +24,6 @@ def getRadar(dt_list, region='jp', save_dir='/media/yoshimi/Elements/pixel/radar
                        coords={'time':dt_list, 'lat':np.linspace(29, 42, 2048), 'lon':np.linspace(120.5, 137.5, 2048)},
                        name='radar')
         return ds.to_dataset()
-    
-def plot(ds, class_num=100):
-    var_name = list(ds.data_vars.keys())[0]
-    gall = ds[var_name].hvplot(title='precipitation', groupby='time', clim=(0,class_num-1), width=500, height=500, alpha=0.6, cmap='jet', geo=True, rasterize=True)
-    return gsmap * gall
 
 def getDates(dt, target=6):
     inputs = pd.date_range(dt - timedelta(hours=1), dt, freq='10min')
@@ -41,6 +34,21 @@ def getDataset(dt, target=6, rect=734, data_path="/media/yoshimi/HDPH-UT/pixel/r
     # center of jp
     h, w = 1800, 1300
     inp, out = getDates(dt, target=target)
+    inp = getRadar(inp, save_dir=data_path).isel(lat=slice(h-rect,h+rect), lon=slice(w-rect,w+rect))
+    out = getRadar(out, save_dir=data_path).isel(lat=slice(h-rect,h+rect), lon=slice(w-rect,w+rect))
+    return inp, out
+
+
+############# For DGMR function #############
+def getDgmrDates(dt, target=180):
+    inputs = pd.date_range(dt - timedelta(minutes=30), dt, freq='10min')
+    outputs = pd.date_range(dt + timedelta(minutes=10), dt + timedelta(minutes=target), freq='10min')
+    return inputs, outputs
+
+def getDgmrDataset(dt, target=180, rect=128, data_path="/media/yoshimi/9E9401BB94019745/pixel/radar"):
+    # center of jp
+    h, w = 1800, 1300
+    inp, out = getDgmrDates(dt, target=target)
     inp = getRadar(inp, save_dir=data_path).isel(lat=slice(h-rect,h+rect), lon=slice(w-rect,w+rect))
     out = getRadar(out, save_dir=data_path).isel(lat=slice(h-rect,h+rect), lon=slice(w-rect,w+rect))
     return inp, out
